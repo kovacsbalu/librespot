@@ -5,7 +5,8 @@ use futures::{future, Future};
 use std;
 use std::borrow::Cow;
 use std::cmp::max;
-use std::io::{Read, Result, Seek, SeekFrom};
+use std::fs::OpenOptions;
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::mem;
 use std::sync::mpsc::{RecvError, RecvTimeoutError, TryRecvError};
 use std::thread;
@@ -427,6 +428,14 @@ impl PlayerInternal {
         }
     }
 
+    fn notify_kodi(&mut self, id: &str, track_id: &SpotifyId) {
+        // println!("fifo = {} {}", id, track_id.to_base62());
+        if self.config.notify_kodi {
+            let mut file = OpenOptions::new().write(true).open("/tmp/librespot").unwrap();
+            writeln!(&mut file, "{}\n{}", id, track_id.to_base62()).unwrap();
+        }
+    }
+
     fn handle_command(&mut self, cmd: PlayerCommand) {
         debug!("command={:?}", cmd);
         match cmd {
@@ -451,11 +460,17 @@ impl PlayerInternal {
                                 | PlayerState::EndOfTrack {
                                     track_id: old_track_id,
                                     ..
-                                } => self.send_event(PlayerEvent::Changed {
-                                    old_track_id: old_track_id,
-                                    new_track_id: track_id,
-                                }),
-                                _ => self.send_event(PlayerEvent::Started { track_id }),
+                                } => {
+                                    self.send_event(PlayerEvent::Changed {
+                                        old_track_id: old_track_id,
+                                        new_track_id: track_id,
+                                    });
+                                    self.notify_kodi("1", &track_id)
+                                }
+                                _ => {
+                                    self.send_event(PlayerEvent::Started { track_id });
+                                    self.notify_kodi("2", &track_id)
+                                }
                             }
 
                             self.start_sink();
@@ -485,13 +500,17 @@ impl PlayerInternal {
                                 | PlayerState::EndOfTrack {
                                     track_id: old_track_id,
                                     ..
-                                } => self.send_event(PlayerEvent::Changed {
-                                    old_track_id: old_track_id,
-                                    new_track_id: track_id,
-                                }),
+                                } => {
+                                    self.send_event(PlayerEvent::Changed {
+                                        old_track_id: old_track_id,
+                                        new_track_id: track_id,
+                                    });
+                                    self.notify_kodi("3", &track_id)
+                                }
                                 _ => (),
                             }
                             self.send_event(PlayerEvent::Stopped { track_id });
+                            self.notify_kodi("4", &track_id)
                         }
                     }
 
@@ -547,6 +566,7 @@ impl PlayerInternal {
 
                     self.send_event(PlayerEvent::Started { track_id });
                     self.start_sink();
+                    self.notify_kodi("5", &track_id)
                 } else {
                     warn!("Player::play called from invalid state");
                 }
@@ -558,6 +578,7 @@ impl PlayerInternal {
 
                     self.stop_sink_if_running();
                     self.send_event(PlayerEvent::Stopped { track_id });
+                    self.notify_kodi("6", &track_id)
                 } else {
                     warn!("Player::pause called from invalid state");
                 }
@@ -570,6 +591,7 @@ impl PlayerInternal {
                     self.stop_sink_if_running();
                     self.send_event(PlayerEvent::Stopped { track_id });
                     self.state = PlayerState::Stopped;
+                    self.notify_kodi("7", &track_id)
                 }
                 PlayerState::Stopped => {
                     warn!("Player::stop called from invalid state");

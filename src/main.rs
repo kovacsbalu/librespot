@@ -186,6 +186,11 @@ fn setup(args: &[String]) -> Setup {
         )
         .optflag(
             "",
+            "notify-kodi",
+            "Notify Kodi",
+        )
+        .optflag(
+            "",
             "linear-volume",
             "increase volume linear instead of logarithmic.",
         )
@@ -282,6 +287,8 @@ fn setup(args: &[String]) -> Setup {
         )
     };
 
+    let notify_kodi = matches.opt_present("notify-kodi");
+
     let session_config = {
         let device_id = device_id(&name);
 
@@ -325,6 +332,7 @@ fn setup(args: &[String]) -> Setup {
                 .opt_str("normalisation-pregain")
                 .map(|pregain| pregain.parse::<f32>().expect("Invalid pregain float value"))
                 .unwrap_or(PlayerConfig::default().normalisation_pregain),
+            notify_kodi: notify_kodi,
         }
     };
 
